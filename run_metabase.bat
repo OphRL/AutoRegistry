@@ -1,0 +1,1 @@
+.\jdk-17.0.2\bin\java -jar metabase.jar
