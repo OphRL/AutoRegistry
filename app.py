@@ -35,8 +35,10 @@ TERMS_RESERVED_COLS = ['snomed_id', 'title', 'ne', 'label']
 def cli():
     pass
 
+
 def log(txt):
     print('[{}] - {}'.format(datetime.now().isoformat(), txt))
+
 
 def preprocess_ner(text):
     # Pre-process recognised named entities
@@ -116,7 +118,7 @@ def calc_tfidf():
 
 
 @cli.command(short_help='Parse loaded notes using spaCY model.')
-@click.option("--batchsize",default=1000,required=False,help="Adjust batch size depending on available system memory.(Default:1000)")
+@click.option("--batchsize", default=1000, required=False, help="Adjust batch size depending on available system memory.(Default:1000)")
 def parse_notes(batchsize):
 
     con = sqlite3.connect(DB_FILENAME)
@@ -135,6 +137,7 @@ def parse_notes(batchsize):
 
         duplicate_count = 0
         new_count = 0
+        processed = 0
 
         docs = [d for d in nlp.pipe(
             notes, n_process=SPACY_NPROCESS_COUNT, batch_size=SPACY_BATCH_SIZE)]
@@ -162,13 +165,12 @@ def parse_notes(batchsize):
                 except sqlite3.IntegrityError:
                     duplicate_count += 1
 
-            docs_processed = docs_processed + 1
-
-        log('New NEs inserted: {}. Duplicate NEs: {}. Total docs: {}'.format(
-            new_count, duplicate_count, docs_processed))
+            processed = processed + 1
 
         con.commit()
         cur.close()
+
+        return new_count, duplicate_count, processed
 
     for row in cur2.execute('SELECT * from notes where parsed is null or id not in (select notes_id from notes_entities);'):
         row_dict = dict(row)
@@ -176,12 +178,18 @@ def parse_notes(batchsize):
         n_ids.append(row_dict['id'])
 
         if len(n) >= batchsize:
-            process_batch(n, n_ids)
+            new_count, duplicate_count, processed = process_batch(n, n_ids)
+            docs_processed += processed
+            log('New NEs inserted: {}. Duplicate NEs: {}. Total docs: {}'.format(
+                new_count, duplicate_count, docs_processed))
             n = []
             n_ids = []
 
     if len(n) > 0 or len(n) != batchsize:
-        process_batch(n, n_ids)
+        new_count, duplicate_count, processed = process_batch(n, n_ids)
+        docs_processed += processed
+        log('New NEs inserted: {}. Duplicate NEs: {}. Total docs: {}'.format(
+            new_count, duplicate_count, docs_processed))
 
 
 @cli.command()
